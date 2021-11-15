@@ -120,9 +120,22 @@ def scale_deployment(name, namespace, replicas):
 
     try:
         try:
-            deployment.patch({"spec": {"replicas": replicas}}, subresource="scale")
-        finally:
-            deployment.reload()  # reload to fetch whole updated Deployment
+            try:
+                deployment.patch({"spec": {"replicas": replicas}}, subresource="scale")
+            finally:
+                deployment.reload()  # reload to fetch whole updated Deployment
+        except pykube.exceptions.HTTPError as e:
+            # XXX: In previous version deployment.update() was always used. It was unnecessary, but after moving to a
+            # subresource patch we've lost backward compatibility, as previous RBAC "patch" on "deployments" doesn't
+            # work. So if we get an 403 pring a warning and try again, this time with full resource update.
+            if e.code == 403:
+                logging.warning(
+                        "Failed to apply patch on a 'scale' subresource, failing back to a full update. "
+                        "Consider upgrading RBAC deployment.")
+                deployment.replicas = replicas
+                deployment.update()
+            else:
+                raise
         logging.info("Deployment %s/%s scaled to %s replicas", namespace, name, replicas)
     except pykube.exceptions.HTTPError as err:
         logging.error("Exception raised while updating deployment %s/%s", namespace, name)
