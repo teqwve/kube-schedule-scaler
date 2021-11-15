@@ -117,10 +117,12 @@ def scale_deployment(name, namespace, replicas):
 
     if replicas is None or replicas == deployment.replicas:
         return
-    deployment.replicas = replicas
 
     try:
-        deployment.update()
+        try:
+            deployment.patch({"spec": {"replicas": replicas}}, subresource="scale")
+        finally:
+            deployment.reload()  # reload to fetch whole updated Deployment
         logging.info("Deployment %s/%s scaled to %s replicas", namespace, name, replicas)
     except pykube.exceptions.HTTPError as err:
         logging.error("Exception raised while updating deployment %s/%s", namespace, name)

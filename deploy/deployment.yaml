@@ -33,10 +33,12 @@ rules:
   verbs: ["get", "list"]
 - apiGroups: ["apps"]
   resources: ["deployments"]
-  verbs: ["get", "list", "patch"]
+  verbs: ["get", "list"]
+- apiGroups: ["apps"]
+  resources: ["deployments/scale"]
+  verbs: ["patch"]
 - apiGroups: ["autoscaling", "extensions"]
-  resources:
-    - horizontalpodautoscalers
+  resources: ["horizontalpodautoscalers"]
   verbs: ["get", "list", "patch"]
 ---
 apiVersion: apps/v1
