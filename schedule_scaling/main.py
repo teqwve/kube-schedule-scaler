@@ -8,7 +8,6 @@ from time import sleep
 
 import pykube
 from croniter import croniter
-from resources import Deployment
 
 
 logging.basicConfig(
@@ -38,7 +37,7 @@ def deployments_to_scale():
     scaling_dict = {}
     for namespace in list(pykube.Namespace.objects(api)):
         namespace = str(namespace)
-        for deployment in Deployment.objects(api).filter(namespace=namespace):
+        for deployment in pykube.Deployment.objects(api).filter(namespace=namespace):
             annotations = deployment.metadata.get("annotations", {})
             f_deployment = str(namespace + "/" + str(deployment))
 
@@ -116,7 +115,7 @@ def process_deployment(deployment, schedules):
 def scale_deployment(name, namespace, replicas):
     """ Scale the deployment to the given number of replicas """
     try:
-        deployment = Deployment.objects(api).filter(
+        deployment = pykube.Deployment.objects(api).filter(
             namespace=namespace).get(name=name)
     except pykube.exceptions.ObjectDoesNotExist:
         logging.warning("Deployment %s/%s does not exist", namespace, name)
