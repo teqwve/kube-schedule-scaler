@@ -205,6 +205,14 @@ def scale_hpa(name, namespace, min_replicas, max_replicas):
 if __name__ == "__main__":
     logging.info("Main loop started")
     last_process_time = round_to_minute(datetime.now())
+
+    startup_schedule_window_sec = os.environ.get("STARTUP_SCHEDULE_WINDOW_SECONDS")
+    if startup_schedule_window_sec:
+        logging.info(
+            "Running the first loop executing schedules old up to %s seconds",
+            startup_schedule_window_sec)
+        last_process_time = last_process_time - timedelta(seconds=int(startup_schedule_window_sec))
+
     while True:
         logging.debug("Waiting until the next minute")
         sleep(get_wait_sec())
