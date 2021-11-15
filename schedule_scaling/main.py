@@ -91,6 +91,11 @@ def get_wait_sec():
 
 def process_deployment(deployment, schedules, now, schedule_window_sec):
     """ Determine actions to run for the given deployment and list of schedules """
+    # newest cron settings to be applied, tuples with (delta seconds, desired replicas)
+    last_replicas = None
+    last_min_replicas = None
+    last_max_replicas = None
+
     namespace, name = deployment.split("/")
     for schedule in schedules:
         # when provided, convert the values to int
@@ -107,14 +112,33 @@ def process_deployment(deployment, schedules, now, schedule_window_sec):
         schedule_expr = schedule.get("schedule", None)
         logging.debug("%s %s", deployment, schedule)
 
+        delta_sec = get_delta_sec(schedule_expr, now)
+
         # if less than window seconds have passed from the trigger
-        if get_delta_sec(schedule_expr, now) < schedule_window_sec:
+        if delta_sec < schedule_window_sec:
             # replicas might equal 0 so we check that is not None
             if replicas is not None:
-                scale_deployment(name, namespace, replicas)
+                if last_replicas is None or last_replicas[0] >= delta_sec:
+                    last_replicas = (delta_sec, replicas)
+
             # these can't be 0 by definition so checking for existence is enough
-            if min_replicas or max_replicas:
-                scale_hpa(name, namespace, min_replicas, max_replicas)
+            if min_replicas:
+                if last_min_replicas is None or last_min_replicas[0] >= delta_sec:
+                    last_min_replicas = (delta_sec, min_replicas)
+            if max_replicas:
+                if last_max_replicas is None or last_max_replicas[0] >= delta_sec:
+                    last_max_replicas = (delta_sec, max_replicas)
+
+    if last_replicas:
+        scale_deployment(name, namespace, last_replicas[1])
+
+    if last_min_replicas or last_max_replicas:
+        scale_hpa(
+            name,
+            namespace,
+            None if last_min_replicas is None else last_min_replicas[1],
+            None if last_max_replicas is None else last_max_replicas[1]
+        )
 
 
 def scale_deployment(name, namespace, replicas):
