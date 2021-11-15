@@ -19,13 +19,7 @@ logging.basicConfig(
 
 def get_kube_api():
     """ Initiating the API from Service Account or when running locally from ~/.kube/config """
-    try:
-        config = pykube.KubeConfig.from_service_account()
-    except FileNotFoundError:
-        # local testing
-        config = pykube.KubeConfig.from_file(
-            os.path.expanduser("~/.kube/config"))
-    return pykube.HTTPClient(config)
+    return pykube.HTTPClient(pykube.KubeConfig.from_env())
 
 
 api = get_kube_api()
