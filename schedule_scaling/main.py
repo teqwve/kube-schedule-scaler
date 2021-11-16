@@ -8,7 +8,6 @@ from time import sleep
 
 import pykube
 from croniter import croniter
-from resources import Deployment
 
 
 logging.basicConfig(
@@ -20,13 +19,7 @@ logging.basicConfig(
 
 def get_kube_api():
     """ Initiating the API from Service Account or when running locally from ~/.kube/config """
-    try:
-        config = pykube.KubeConfig.from_service_account()
-    except FileNotFoundError:
-        # local testing
-        config = pykube.KubeConfig.from_file(
-            os.path.expanduser("~/.kube/config"))
-    return pykube.HTTPClient(config)
+    return pykube.HTTPClient(pykube.KubeConfig.from_env())
 
 
 api = get_kube_api()
@@ -38,7 +31,7 @@ def deployments_to_scale():
     scaling_dict = {}
     for namespace in list(pykube.Namespace.objects(api)):
         namespace = str(namespace)
-        for deployment in Deployment.objects(api).filter(namespace=namespace):
+        for deployment in pykube.Deployment.objects(api).filter(namespace=namespace):
             annotations = deployment.metadata.get("annotations", {})
             f_deployment = str(namespace + "/" + str(deployment))
 
@@ -144,7 +137,7 @@ def process_deployment(deployment, schedules, now, schedule_window_sec):
 def scale_deployment(name, namespace, replicas):
     """ Scale the deployment to the given number of replicas """
     try:
-        deployment = Deployment.objects(api).filter(
+        deployment = pykube.Deployment.objects(api).filter(
             namespace=namespace).get(name=name)
     except pykube.exceptions.ObjectDoesNotExist:
         logging.warning("Deployment %s/%s does not exist", namespace, name)
@@ -152,10 +145,25 @@ def scale_deployment(name, namespace, replicas):
 
     if replicas is None or replicas == deployment.replicas:
         return
-    deployment.replicas = replicas
 
     try:
-        deployment.update()
+        try:
+            try:
+                deployment.patch({"spec": {"replicas": replicas}}, subresource="scale")
+            finally:
+                deployment.reload()  # reload to fetch whole updated Deployment
+        except pykube.exceptions.HTTPError as e:
+            # XXX: In previous version deployment.update() was always used. It was unnecessary, but after moving to a
+            # subresource patch we've lost backward compatibility, as previous RBAC "patch" on "deployments" doesn't
+            # work. So if we get an 403 pring a warning and try again, this time with full resource update.
+            if e.code == 403:
+                logging.warning(
+                        "Failed to apply patch on a 'scale' subresource, failing back to a full update. "
+                        "Consider upgrading RBAC deployment.")
+                deployment.replicas = replicas
+                deployment.update()
+            else:
+                raise
         logging.info("Deployment %s/%s scaled to %s replicas", namespace, name, replicas)
     except pykube.exceptions.HTTPError as err:
         logging.error("Exception raised while updating deployment %s/%s", namespace, name)

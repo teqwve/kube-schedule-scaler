@@ -1,6 +1,7 @@
 FROM python:3.8-alpine
 
-RUN pip install --no-cache-dir pykube croniter
+COPY requirements.txt /tmp/requirements.txt
+RUN pip install --no-cache-dir -r /tmp/requirements.txt && rm /tmp/requirements.txt
 
 RUN adduser -u 1000 -D app && \
     mkdir /app && \

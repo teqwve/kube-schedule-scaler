@@ -1,0 +1,2 @@
+pykube-ng==21.10.0
+croniter==1.0.15
